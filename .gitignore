@@ -1,0 +1,4 @@
+files/*
+terraform/.terraform*
+terraform/version.tf
+terraform/env.sh

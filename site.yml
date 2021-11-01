@@ -1,0 +1,109 @@
+---
+- name: Install Elasticsearch
+  hosts: el-instance
+  tag: elasticsearch
+  handlers:
+    - name: restart Elasticsearch
+      become: true
+      service:
+        name: elasticsearch
+        state: restarted
+  tasks:
+    - name: "Download Elasticsearch's deb"
+      get_url:
+        url: "https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-{{ elk_stack_version }}-amd64.deb"
+        dest: "/tmp/elasticsearch-{{ elk_stack_version }}-amd64.deb"
+      register: download_elastic
+      until: download_elastic is succeeded
+    - name: Install Elasticsearch
+      become: true
+      apt:
+        deb: "/tmp/elasticsearch-{{ elk_stack_version }}-amd64.deb"
+        state: present
+      notify: restart Elasticsearch
+    - name: Configure Elasticsearch
+      become: true
+      template:
+        src: elasticsearch.yml.j2
+        dest: /etc/elasticsearch/elasticsearch.yml
+        mode: 0644
+      notify: restart Elasticsearch
+
+- name: Install Kibana
+  hosts: kib-instance
+  tag: kibana
+  handlers:
+    - name: restart Kibana
+      become: true
+      systemd:
+        name: kibana
+        state: restarted
+        enabled: true
+  tasks:
+    - name: "Download Kibana's deb"
+      get_url:
+        url: "https://artifacts.elastic.co/downloads/kibana/kibana-{{ elk_stack_version }}-amd64.deb"
+        dest: "/tmp/kibana-{{ elk_stack_version }}-amd64.deb"
+      register: download_kibana
+      until: download_kibana is succeeded
+    - name: Install Kibana
+      become: true
+      apt:
+        deb: "/tmp/kibana-{{ elk_stack_version }}-amd64.deb"
+        state: present
+      notify: restart Kibana
+    - name: Configure Kibana
+      become: true
+      template:
+        src: kibana.yml.j2
+        dest: /etc/kibana/kibana.yml
+        mode: 0644
+      notify: restart Kibana
+
+- name: Install Filebeat
+  hosts: app-instance
+  tag: filebeat
+  handlers:
+    - name: restart Filebeat
+      become: true
+      systemd:
+        name: filebeat
+        state: restarted
+        enabled: true
+  tasks:
+    - name: "Download Filebeat's deb"
+      get_url:
+        url: "https://artifacts.elastic.co/downloads/beats/filebeat/filebeat-{{ elk_stack_version }}-amd64.deb"
+        dest: "/tmp/filebeat-{{ elk_stack_version }}-amd64.deb"
+      register: download_filebeat
+      until: download_filebeat is succeeded
+    - name: Install Filebeat
+      become: true
+      apt:
+        deb: "/tmp/filebeat-{{ elk_stack_version }}-amd64.deb"
+        state: present
+      notify: restart Filebeat
+    - name: Configure Filebeat
+      become: true
+      template:
+        src: filebeat.yml.j2
+        dest: /etc/filebeat/filebeat.yml
+        mode: 0644
+      notify: restart Filebeat
+    - name: Set Filebeat Systemwork
+      become: true
+      command:
+        cmd: filebeat modules enable system
+        chdir: /usr/share/filebeat/bin
+      register: filebeat_systemwork_output
+      changed_when: '"Module system is already enabled" not in filebeat_systemwork_output.stdout'
+    - name: Load Kibana Dashboard
+      become: true
+      command:
+        cmd: filebeat setup
+        chdir: /usr/share/filebeat/bin
+      register: filebeat_setup
+      until: filebeat_setup is succeeded
+      changed_when: false
+      notify: restart Filebeat
+
